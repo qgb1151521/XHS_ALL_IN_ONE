@@ -23,6 +23,44 @@ def _get_query_params(parsed_url):
     }
 
 
+def resolve_xhs_short_url(url: str) -> str:
+    """
+    解析小红书短链接（xhslink.com），通过 HTTP 重定向获取真实的笔记链接。
+    如果不是短链接或解析失败，原样返回原始 URL。
+
+    支持的短链格式：
+      - http(s)://xhslink.com/xxxxx
+      - http(s)://xhslink.com/a/xxxxx
+      - http(s)://xhslink.com/o/xxxxx
+      - http(s)://xhslink.com/d/xxxxx
+    """
+    parsed = urllib.parse.urlparse(url)
+    host = (parsed.hostname or "").lower()
+    if host not in ("xhslink.com", "www.xhslink.com"):
+        return url
+
+    try:
+        resp = requests.head(url, allow_redirects=True, timeout=10,
+                             headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"})
+        resolved = resp.url  # 最终重定向后的 URL
+        if resolved and "xiaohongshu.com" in resolved:
+            logger.info(f"Short link resolved: {url} -> {resolved}")
+            return resolved
+        # HEAD 可能不被支持，尝试 GET
+        resp = requests.get(url, allow_redirects=True, timeout=10,
+                            headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"},
+                            stream=True)  # stream=True 避免下载整个页面
+        resolved = resp.url
+        if resolved and "xiaohongshu.com" in resolved:
+            logger.info(f"Short link resolved (GET): {url} -> {resolved}")
+            return resolved
+        logger.warning(f"Short link resolved but not xiaohongshu.com: {url} -> {resolved}")
+        return resolved or url
+    except Exception as e:
+        logger.warning(f"Failed to resolve short link {url}: {e}")
+        return url
+
+
 class XHS_Apis():
     def __init__(self):
         self.base_url = "https://edith.xiaohongshu.com"
@@ -364,16 +402,22 @@ class XHS_Apis():
     def get_note_info(self, url: str, cookies_str: str, proxies: dict = None):
         """
             获取笔记的详细
-            :param url: 你想要获取的笔记的url
+            :param url: 你想要获取的笔记的url（支持短链接 xhslink.com）
             :param cookies_str: 你的cookies
             :param xsec_source: 你的xsec_source 默认为pc_search pc_user pc_feed
             返回笔记的详细
         """
         res_json = None
         try:
+            # 解析短链接（xhslink.com -> xiaohongshu.com）
+            url = resolve_xhs_short_url(url)
             urlParse = urllib.parse.urlparse(url)
             note_id = urlParse.path.split("/")[-1]
             kvDist = _get_query_params(urlParse)
+            # 短链解析后 xsec_source 可能是 app_share 等，需统一为 pc_search 以兼容 PC cookie
+            xsec_source = kvDist.get('xsec_source', 'pc_search')
+            if xsec_source not in ('pc_search', 'pc_user', 'pc_feed', 'pc_share'):
+                xsec_source = 'pc_search'
             api = f"/api/sns/web/v1/feed"
             data = {
                 "source_note_id": note_id,
@@ -385,7 +429,7 @@ class XHS_Apis():
                 "extra": {
                     "need_body_topic": "1"
                 },
-                "xsec_source": kvDist['xsec_source'] if 'xsec_source' in kvDist else "pc_search",
+                "xsec_source": xsec_source,
                 "xsec_token": kvDist.get('xsec_token', '')
             }
             headers, cookies, data = generate_request_params(cookies_str, api, data, 'POST')
@@ -745,12 +789,14 @@ class XHS_Apis():
     def get_note_all_comment(self, url: str, cookies_str: str, proxies: dict = None):
         """
             获取一篇文章的所有评论
-            :param note_id: 你想要获取的笔记的id
+            :param note_id: 你想要获取的笔记的id（支持短链接 xhslink.com）
             :param cookies_str: 你的cookies
             返回一篇文章的所有评论
         """
         out_comment_list = []
         try:
+            # 解析短链接（xhslink.com -> xiaohongshu.com）
+            url = resolve_xhs_short_url(url)
             urlParse = urllib.parse.urlparse(url)
             note_id = urlParse.path.split("/")[-1]
             kvDist = _get_query_params(urlParse)

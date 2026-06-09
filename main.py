@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import os
 import shutil
 import subprocess
 import sys
@@ -9,6 +10,78 @@ from typing import Optional, Sequence
 
 
 ROOT = Path(__file__).resolve().parent
+
+
+def _find_node_exe() -> Optional[Path]:
+    """Locate node.exe from PATH or well-known install locations."""
+    # 1. Check if node/nodejs is already on PATH
+    for cmd in ("node", "nodejs", "node.exe"):
+        found = shutil.which(cmd)
+        if found:
+            return Path(found)
+
+    # 2. Search well-known locations (WorkBuddy managed runtime first)
+    candidates = [
+        Path.home() / ".workbuddy" / "binaries" / "node" / "versions",
+        Path(os.environ.get("APPDATA", "")) / ".." / ".workbuddy" / "binaries" / "node" / "versions",
+        Path("C:/Program Files/nodejs"),
+        Path("C:/Program Files (x86)/nodejs"),
+        Path(os.environ.get("ProgramFiles", "C:/Program Files")) / "nodejs",
+    ]
+    for base in candidates:
+        try:
+            base = base.resolve()
+        except Exception:
+            pass
+        if not base.is_dir():
+            continue
+        # Versions sub-directory (e.g. 22.12.0/)
+        for child in sorted(base.iterdir(), reverse=True):
+            exe = child / "node.exe"
+            if exe.is_file():
+                return exe
+        # Direct directory
+        exe = base / "node.exe"
+        if exe.is_file():
+            return exe
+    return None
+
+
+def _patch_execjs_node_runtime() -> None:
+    """Patch execjs to use the absolute path of node.exe.
+
+    execjs on Windows looks for 'nodejs' in PATH which is often missing.
+    We locate node.exe and override the runtime command to use the full path
+    so execjs works regardless of PATH configuration.
+    """
+    node_exe = _find_node_exe()
+    if not node_exe:
+        print("[startup] WARNING: node.exe not found; execjs JS runtime may fail.")
+        return
+
+    node_exe_str = str(node_exe)
+    node_dir_str = str(node_exe.parent)
+
+    # Always inject the node directory into PATH (needed for subprocess calls within execjs)
+    current_path = os.environ.get("PATH", "")
+    if node_dir_str.lower() not in current_path.lower():
+        os.environ["PATH"] = node_dir_str + os.pathsep + current_path
+        print(f"[startup] Added Node.js dir to PATH: {node_dir_str}")
+
+    try:
+        import execjs._runtimes as runtimes
+
+        for _name, rt in runtimes._runtimes:
+            if _name == "Node" and hasattr(rt, "_command"):
+                rt._command = [node_exe_str]
+                break
+        print(f"[startup] execjs Node runtime patched to: {node_exe_str}")
+    except Exception as exc:
+        print(f"[startup] execjs patch skipped ({exc}), relying on PATH.")
+
+
+# Patch execjs immediately so it can find Node.js regardless of PATH
+_patch_execjs_node_runtime()
 
 
 def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:

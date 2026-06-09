@@ -10,17 +10,50 @@ import {
   PictureOutlined,
   ReloadOutlined,
   RightOutlined,
+  ScissorOutlined,
   SearchOutlined,
   StarOutlined,
 } from "@ant-design/icons";
-import { Alert, Badge, Button, Card, Col, Descriptions, Drawer, Empty, Input, Row, Select, Space, Spin, Tag, Typography } from "antd";
-import { FormEvent, MouseEvent, useEffect, useMemo, useState } from "react";
+import { Alert, Badge, Button, Card, Col, Descriptions, Drawer, Empty, Input, Row, Select, Space, Spin, Tag, Tooltip, Typography } from "antd";
+import { ClipboardEvent, FormEvent, MouseEvent, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 
 import { fetchAccounts, fetchSavedNoteIds, fetchXhsNoteComments, fetchXhsNoteDetail, saveXhsNotesToLibrary, searchXhsNotes } from "../../../lib/api";
 import type { NoteComment, PlatformAccount, XhsSearchNote, XhsSearchOptions } from "../../../types";
 
 const { Title, Text, Paragraph } = Typography;
+
+/**
+ * 判断一个 URL 是否为小红书短链接
+ */
+function isXhsShortUrl(url: string): boolean {
+  return /^https?:\/\/(?:www\.)?xhslink\.com\//i.test(url);
+}
+
+/**
+ * 从任意文本（包括小红书 App 分享热链文字）中提取第一个可用的笔记链接。
+ * 支持：
+ *   - https://www.xiaohongshu.com/explore/<noteId>
+ *   - https://www.xiaohongshu.com/discovery/item/<noteId>
+ *   - https://www.xiaohongshu.com/search_result/<noteId>
+ *   - https://www.xiaohongshu.com/user/profile/<userId>
+ *   - https://xhslink.com/<shortCode>  （短链，后端会自动解析重定向）
+ *   - https://xhslink.com/a/<shortCode>
+ *   - https://xhslink.com/o/<shortCode>
+ *   - http://xhslink.com/... （http 协议同样支持）
+ */
+function extractXhsUrl(text: string): string | null {
+  // 优先匹配完整的小红书正式链接（支持更多路径格式和查询参数中的点号）
+  const fullMatch = text.match(/https?:\/\/(?:www\.)?xiaohongshu\.com\/(?:explore|discovery\/item|search_result|user\/profile)\/[A-Za-z0-9_.?=&%\-]+/);
+  if (fullMatch) return fullMatch[0];
+  // 其次匹配短链（支持 /a/ /o/ /d/ 等子路径，以及查询参数中的点号）
+  const shortMatch = text.match(/https?:\/\/(?:www\.)?xhslink\.com\/(?:[aod]\/)?[A-Za-z0-9_.?=&%\-]+/i);
+  if (shortMatch) return shortMatch[0];
+  // 再尝试匹配更宽泛的小红书域名 URL
+  const broadMatch = text.match(/https?:\/\/[A-Za-z0-9.-]*xiaohongshu\.com\/[^\s，,。！!？?【】\u200b]+/);
+  if (broadMatch) return broadMatch[0];
+  return null;
+}
 
 const sortOptions = [{ value: 0, label: "综合排序" }, { value: 1, label: "最新" }, { value: 2, label: "最多点赞" }, { value: 3, label: "最多评论" }, { value: 4, label: "最多收藏" }];
 const noteTypeOptions = [{ value: 0, label: "不限类型" }, { value: 1, label: "视频笔记" }, { value: 2, label: "普通笔记" }];
@@ -75,6 +108,8 @@ export function XhsDiscoveryPage() {
   const [selectedAccountId, setSelectedAccountId] = useState<number | null>(null);
   const [keyword, setKeyword] = useState("");
   const [noteUrl, setNoteUrl] = useState("");
+  const [pasteHint, setPasteHint] = useState<{ type: "success" | "error"; msg: string } | null>(null);
+  const pasteHintTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [filters, setFilters] = useState({ sort_type_choice: 0, note_type: 0, note_time: 0, note_range: 0, pos_distance: 0, geo: "" });
   const [notes, setNotes] = useState<XhsSearchNote[]>([]);
   const [page, setPage] = useState(1);
@@ -148,6 +183,40 @@ export function XhsDiscoveryPage() {
     setSelectedNote((c) => c?.note_id === note.note_id ? merged : c); return merged;
   }
 
+  function showPasteHint(type: "success" | "error", msg: string) {
+    setPasteHint({ type, msg });
+    if (pasteHintTimer.current) clearTimeout(pasteHintTimer.current);
+    pasteHintTimer.current = setTimeout(() => setPasteHint(null), 3000);
+  }
+
+  function handleUrlPaste(e: ClipboardEvent<HTMLInputElement>) {
+    const text = e.clipboardData?.getData("text") ?? "";
+    if (!text.trim()) return;
+    // 如果粘贴内容本身就是一个纯 URL，直接允许默认行为
+    const trimmed = text.trim();
+    if (/^https?:\/\//.test(trimmed) && !trimmed.includes(" ") && !trimmed.includes("\n")) {
+      // 纯短链接粘贴时给出提示
+      if (isXhsShortUrl(trimmed)) {
+        showPasteHint("success", "已识别短链接，点击「URL 直查」将自动解析");
+      }
+      return;
+    }
+    // 否则尝试从分享热链文字中提取 URL
+    const extracted = extractXhsUrl(text);
+    if (extracted) {
+      e.preventDefault();
+      setNoteUrl(extracted);
+      if (isXhsShortUrl(extracted)) {
+        showPasteHint("success", "已从分享内容中提取短链接，后端将自动解析");
+      } else {
+        showPasteHint("success", "已从分享内容中提取链接");
+      }
+    } else {
+      // 无法提取，不阻止粘贴，让用户看到完整文字并自己处理
+      showPasteHint("error", "未能识别小红书链接，已粘贴原始文字");
+    }
+  }
+
   async function handleFetchUrlDetail() {
     setError(null); if (!selectedAccountId) { setError("请先选择一个 PC 账号。"); return; }
     const cleanUrl = noteUrl.trim(); if (!cleanUrl) { setError("请输入小红书笔记 URL。"); return; }
@@ -211,7 +280,31 @@ export function XhsDiscoveryPage() {
             <Col span={3}><div style={{ marginBottom: 4 }}><Text type="secondary" style={{ fontSize: 12 }}>范围</Text></div><Select value={filters.note_range} onChange={(v) => setFilters((c) => ({ ...c, note_range: v }))} style={{ width: "100%" }} options={noteRangeOptions} /></Col>
           </Row>
           <Row gutter={12} style={{ marginTop: 12 }} align="bottom">
-            <Col span={6}><div style={{ marginBottom: 4 }}><Text type="secondary" style={{ fontSize: 12 }}>笔记 URL</Text></div><Input value={noteUrl} onChange={(e) => setNoteUrl(e.target.value)} placeholder="https://www.xiaohongshu.com/explore/..." /></Col>
+            <Col span={6}>
+              <div style={{ marginBottom: 4 }}>
+                <Text type="secondary" style={{ fontSize: 12 }}>笔记 URL</Text>
+                <Text type="secondary" style={{ fontSize: 11, marginLeft: 6, color: "rgba(255,255,255,.3)" }}>（支持粘贴 App 分享热链）</Text>
+              </div>
+              <Input
+                value={noteUrl}
+                onChange={(e) => setNoteUrl(e.target.value)}
+                onPaste={handleUrlPaste}
+                placeholder="粘贴小红书链接或 App 分享文字..."
+                allowClear
+                suffix={
+                  pasteHint
+                    ? <Tooltip title={pasteHint.msg} open>
+                        <ScissorOutlined style={{ color: pasteHint.type === "success" ? "#52c41a" : "#faad14" }} />
+                      </Tooltip>
+                    : <span />
+                }
+              />
+              {pasteHint && (
+                <div style={{ marginTop: 4, fontSize: 11, color: pasteHint.type === "success" ? "#52c41a" : "#faad14" }}>
+                  {pasteHint.type === "success" ? "✓ " : "⚠ "}{pasteHint.msg}
+                </div>
+              )}
+            </Col>
             <Col><Button icon={<SearchOutlined />} loading={isFetchingUrl} disabled={noPcAccount} onClick={handleFetchUrlDetail}>URL 直查</Button></Col>
           </Row>
         </form>
