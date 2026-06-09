@@ -399,6 +399,104 @@ class XHS_Apis():
             msg = _log_api_error(e)
         return success, msg, note_list
 
+    def collect_note(self, note_id: str, cookies_str: str, proxies: dict = None):
+        """
+            收藏笔记
+            :param note_id: 笔记的note_id
+            :param cookies_str: 你的cookies
+            返回收藏结果
+        """
+        res_json = None
+        try:
+            api = "/api/sns/web/v1/note/collect"
+            data = {
+                "note_id": note_id,
+                "type": 1,
+            }
+            headers, cookies, trans_data = generate_request_params(cookies_str, api, data, 'POST')
+            response = requests.post(self.base_url + api, headers=headers, data=trans_data, cookies=cookies, proxies=proxies, timeout=REQUEST_TIMEOUT)
+            res_json = response.json()
+            success, msg = res_json.get("success", False), res_json.get("msg", "")
+        except Exception as e:
+            success = False
+            msg = _log_api_error(e)
+        return success, msg, res_json
+
+    def uncollect_note(self, note_id: str, cookies_str: str, proxies: dict = None):
+        """
+            取消收藏笔记
+            :param note_id: 笔记的note_id
+            :param cookies_str: 你的cookies
+            返回取消收藏结果
+        """
+        res_json = None
+        try:
+            api = "/api/sns/web/v1/note/collect"
+            data = {
+                "note_id": note_id,
+                "type": 0,
+            }
+            headers, cookies, trans_data = generate_request_params(cookies_str, api, data, 'POST')
+            response = requests.post(self.base_url + api, headers=headers, data=trans_data, cookies=cookies, proxies=proxies, timeout=REQUEST_TIMEOUT)
+            res_json = response.json()
+            success, msg = res_json.get("success", False), res_json.get("msg", "")
+        except Exception as e:
+            success = False
+            msg = _log_api_error(e)
+        return success, msg, res_json
+
+    def like_note(self, note_id: str, cookies_str: str, proxies: dict = None):
+        """
+            点赞笔记
+            :param note_id: 笔记的note_id
+            :param cookies_str: 你的cookies
+            返回点赞结果
+        """
+        res_json = None
+        try:
+            api = "/api/sns/web/v1/note/like"
+            data = {
+                "note_oid": note_id,
+                "type": 1,
+            }
+            headers, cookies, trans_data = generate_request_params(cookies_str, api, data, 'POST')
+            logger.info(f"[like_note] note_id={note_id!r}, trans_data={trans_data!r}")
+            logger.info(f"[like_note] headers[x-s]={headers.get('x-s', '')[:20]}..., x-t={headers.get('x-t', '')}")
+            response = requests.post(self.base_url + api, headers=headers, data=trans_data, cookies=cookies, proxies=proxies, timeout=REQUEST_TIMEOUT)
+            logger.info(f"[like_note] response status={response.status_code}, body={response.text[:500]}")
+            res_json = response.json()
+            success, msg = res_json.get("success", False), res_json.get("msg", "")
+        except Exception as e:
+            success = False
+            msg = _log_api_error(e)
+        return success, msg, res_json
+
+    def unlike_note(self, note_id: str, cookies_str: str, proxies: dict = None):
+        """
+            取消点赞笔记
+            :param note_id: 笔记的note_id
+            :param cookies_str: 你的cookies
+            返回取消点赞结果
+        """
+        res_json = None
+        try:
+            api = "/api/sns/web/v1/note/like"
+            data = {
+                "note_oid": note_id,
+                "type": 0,
+            }
+            headers, cookies, trans_data = generate_request_params(cookies_str, api, data, 'POST')
+            logger.info(f"[unlike_note] note_id={note_id!r}, trans_data={trans_data!r}")
+            logger.info(f"[unlike_note] headers[x-s]={headers.get('x-s', '')[:20]}..., x-t={headers.get('x-t', '')}")
+            response = requests.post(self.base_url + api, headers=headers, data=trans_data, cookies=cookies, proxies=proxies, timeout=REQUEST_TIMEOUT)
+            logger.info(f"[unlike_note] response status={response.status_code}, body={response.text[:500]}")
+            res_json = response.json()
+            success, msg = res_json.get("success", False), res_json.get("msg", "")
+        except Exception as e:
+            success = False
+            msg = _log_api_error(e)
+        return success, msg, res_json
+
     def get_note_info(self, url: str, cookies_str: str, proxies: dict = None):
         """
             获取笔记的详细

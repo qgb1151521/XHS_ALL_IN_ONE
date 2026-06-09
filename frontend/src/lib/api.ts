@@ -450,6 +450,38 @@ export async function fetchXhsNoteComments(payload: {
   };
 }
 
+export async function collectXhsNote(payload: {
+  account_id: number;
+  note_id: string;
+}): Promise<{ success: boolean; note_id: string }> {
+  const response = await http.post<{ success: boolean; note_id: string }>("/xhs/pc/notes/collect", payload);
+  return response.data;
+}
+
+export async function uncollectXhsNote(payload: {
+  account_id: number;
+  note_id: string;
+}): Promise<{ success: boolean; note_id: string }> {
+  const response = await http.post<{ success: boolean; note_id: string }>("/xhs/pc/notes/uncollect", payload);
+  return response.data;
+}
+
+export async function likeXhsNote(payload: {
+  account_id: number;
+  note_id: string;
+}): Promise<{ success: boolean; note_id: string }> {
+  const response = await http.post<{ success: boolean; note_id: string }>("/xhs/pc/notes/like", payload);
+  return response.data;
+}
+
+export async function unlikeXhsNote(payload: {
+  account_id: number;
+  note_id: string;
+}): Promise<{ success: boolean; note_id: string }> {
+  const response = await http.post<{ success: boolean; note_id: string }>("/xhs/pc/notes/unlike", payload);
+  return response.data;
+}
+
 export async function saveXhsNotesToLibrary(payload: {
   account_id: number;
   notes: XhsSearchNote[];

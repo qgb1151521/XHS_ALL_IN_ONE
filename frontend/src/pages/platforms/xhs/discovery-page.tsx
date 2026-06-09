@@ -2,6 +2,7 @@ import {
   CheckOutlined,
   CommentOutlined,
   DatabaseOutlined,
+  HeartFilled,
   HeartOutlined,
   LeftOutlined,
   LinkOutlined,
@@ -12,13 +13,14 @@ import {
   RightOutlined,
   ScissorOutlined,
   SearchOutlined,
+  StarFilled,
   StarOutlined,
 } from "@ant-design/icons";
 import { Alert, Badge, Button, Card, Col, Descriptions, Drawer, Empty, Input, Row, Select, Space, Spin, Tag, Tooltip, Typography } from "antd";
 import { ClipboardEvent, FormEvent, MouseEvent, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 
-import { fetchAccounts, fetchSavedNoteIds, fetchXhsNoteComments, fetchXhsNoteDetail, saveXhsNotesToLibrary, searchXhsNotes } from "../../../lib/api";
+import { collectXhsNote, likeXhsNote, uncollectXhsNote, unlikeXhsNote, fetchAccounts, fetchSavedNoteIds, fetchXhsNoteComments, fetchXhsNoteDetail, saveXhsNotesToLibrary, searchXhsNotes } from "../../../lib/api";
 import type { NoteComment, PlatformAccount, XhsSearchNote, XhsSearchOptions } from "../../../types";
 
 const { Title, Text, Paragraph } = Typography;
@@ -129,6 +131,10 @@ export function XhsDiscoveryPage() {
   const [commentPreviewByNoteId, setCommentPreviewByNoteId] = useState<Record<string, NoteComment[]>>({});
   const [commentPreviewErrors, setCommentPreviewErrors] = useState<Record<string, string>>({});
   const [loadingCommentNoteIds, setLoadingCommentNoteIds] = useState<string[]>([]);
+  const [collectedNoteIds, setCollectedNoteIds] = useState<string[]>([]);
+  const [collectingNoteIds, setCollectingNoteIds] = useState<string[]>([]);
+  const [likedNoteIds, setLikedNoteIds] = useState<string[]>([]);
+  const [likingNoteIds, setLikingNoteIds] = useState<string[]>([]);
 
   const pcAccounts = useMemo(() => accounts.filter((a) => a.platform === "xhs" && a.sub_type === "pc"), [accounts]);
   const pcAccountOptions = useMemo(() => pcAccounts.map((a) => ({ value: a.id, label: `${a.nickname || `PC ${a.id}`} · ${a.status}` })), [pcAccounts]);
@@ -166,6 +172,46 @@ export function XhsDiscoveryPage() {
       const ids = await fetchSavedNoteIds("xhs");
       setSavedNoteIds(ids);
     } catch { /* ignore */ }
+  }
+
+  async function handleToggleCollect(note: XhsSearchNote) {
+    setError(null); if (!selectedAccountId) { setError("请先选择一个 PC 账号。"); return; }
+    const isCollected = collectedNoteIds.includes(note.note_id);
+    setCollectingNoteIds((c) => [...c, note.note_id]);
+    try {
+      if (isCollected) {
+        await uncollectXhsNote({ account_id: selectedAccountId, note_id: note.note_id });
+        setCollectedNoteIds((c) => c.filter((id) => id !== note.note_id));
+      } else {
+        await collectXhsNote({ account_id: selectedAccountId, note_id: note.note_id });
+        setCollectedNoteIds((c) => c.includes(note.note_id) ? c : [...c, note.note_id]);
+      }
+    } catch (err: unknown) {
+      const a = err as { response?: { status?: number; data?: { detail?: string } }; message?: string };
+      setError(a?.response?.data?.detail ? `[${a.response.status}] ${a.response.data.detail}` : `${isCollected ? "取消收藏" : "收藏"}失败：${a?.message || "请检查网络和后端服务"}`);
+    } finally {
+      setCollectingNoteIds((c) => c.filter((id) => id !== note.note_id));
+    }
+  }
+
+  async function handleToggleLike(note: XhsSearchNote) {
+    setError(null); if (!selectedAccountId) { setError("请先选择一个 PC 账号。"); return; }
+    const isLiked = likedNoteIds.includes(note.note_id);
+    setLikingNoteIds((c) => [...c, note.note_id]);
+    try {
+      if (isLiked) {
+        await unlikeXhsNote({ account_id: selectedAccountId, note_id: note.note_id });
+        setLikedNoteIds((c) => c.filter((id) => id !== note.note_id));
+      } else {
+        await likeXhsNote({ account_id: selectedAccountId, note_id: note.note_id });
+        setLikedNoteIds((c) => c.includes(note.note_id) ? c : [...c, note.note_id]);
+      }
+    } catch (err: unknown) {
+      const a = err as { response?: { status?: number; data?: { detail?: string } }; message?: string };
+      setError(a?.response?.data?.detail ? `[${a.response.status}] ${a.response.data.detail}` : `${isLiked ? "取消点赞" : "点赞"}失败：${a?.message || "请检查网络和后端服务"}`);
+    } finally {
+      setLikingNoteIds((c) => c.filter((id) => id !== note.note_id));
+    }
   }
 
   async function handleSaveNote(note: XhsSearchNote) {
@@ -343,6 +389,12 @@ export function XhsDiscoveryPage() {
                         <Button size="small" type={savedNoteIds.includes(note.note_id) ? "default" : "primary"} ghost={!savedNoteIds.includes(note.note_id)} icon={savedNoteIds.includes(note.note_id) ? <CheckOutlined /> : <DatabaseOutlined />} loading={savingNoteIds.includes(note.note_id)} disabled={savedNoteIds.includes(note.note_id)} onClick={() => void handleSaveNote(note)}>
                           {savedNoteIds.includes(note.note_id) ? "已保存" : "保存"}
                         </Button>
+                        <Button size="small" danger={likedNoteIds.includes(note.note_id)} icon={likedNoteIds.includes(note.note_id) ? <HeartFilled /> : <HeartOutlined />} loading={likingNoteIds.includes(note.note_id)} onClick={() => void handleToggleLike(note)}>
+                          {likedNoteIds.includes(note.note_id) ? "已点赞" : "点赞"}
+                        </Button>
+                        <Button size="small" danger={collectedNoteIds.includes(note.note_id)} icon={collectedNoteIds.includes(note.note_id) ? <StarFilled /> : <StarOutlined />} loading={collectingNoteIds.includes(note.note_id)} onClick={() => void handleToggleCollect(note)}>
+                          {collectedNoteIds.includes(note.note_id) ? "已收藏" : "收藏"}
+                        </Button>
                         <Button size="small" icon={<CommentOutlined />} loading={loadingCommentNoteIds.includes(note.note_id)} onClick={() => void handlePreviewComments(note)}>
                           {commentPreviewByNoteId[note.note_id] ? "收起" : "评论"}
                         </Button>
@@ -437,6 +489,18 @@ export function XhsDiscoveryPage() {
                 loading={savingNoteIds.includes(selectedNote.note_id)}
                 disabled={savedNoteIds.includes(selectedNote.note_id)}
               >{savedNoteIds.includes(selectedNote.note_id) ? "已保存" : "保存到内容库"}</Button>
+              <Button
+                danger={likedNoteIds.includes(selectedNote.note_id)}
+                icon={likedNoteIds.includes(selectedNote.note_id) ? <HeartFilled /> : <HeartOutlined />}
+                onClick={() => void handleToggleLike(selectedNote)}
+                loading={likingNoteIds.includes(selectedNote.note_id)}
+              >{likedNoteIds.includes(selectedNote.note_id) ? "已点赞" : "点赞"}</Button>
+              <Button
+                danger={collectedNoteIds.includes(selectedNote.note_id)}
+                icon={collectedNoteIds.includes(selectedNote.note_id) ? <StarFilled /> : <StarOutlined />}
+                onClick={() => void handleToggleCollect(selectedNote)}
+                loading={collectingNoteIds.includes(selectedNote.note_id)}
+              >{collectedNoteIds.includes(selectedNote.note_id) ? "已收藏" : "收藏"}</Button>
               <Button icon={<CommentOutlined />} onClick={() => void handlePreviewComments(selectedNote)}>{commentPreviewByNoteId[selectedNote.note_id] ? "收起评论" : "查看评论"}</Button>
               {getPreviewNoteUrl(selectedNote) && <Button type="primary" icon={<LinkOutlined />} href={getPreviewNoteUrl(selectedNote)} target="_blank" rel="noreferrer">打开原文</Button>}
             </Space>

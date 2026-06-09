@@ -57,6 +57,34 @@ class XhsPcApiAdapter:
             api = XHS_Apis()
             return api.get_user_all_notes(user_url=user_url, cookies_str=self.cookies)
 
+    def collect_note(self, note_id: str) -> Any:
+        with direct_xhs_request_env():
+            from apis.xhs_pc_apis import XHS_Apis
+
+            api = XHS_Apis()
+            return api.collect_note(note_id=note_id, cookies_str=self.cookies)
+
+    def uncollect_note(self, note_id: str) -> Any:
+        with direct_xhs_request_env():
+            from apis.xhs_pc_apis import XHS_Apis
+
+            api = XHS_Apis()
+            return api.uncollect_note(note_id=note_id, cookies_str=self.cookies)
+
+    def like_note(self, note_id: str) -> Any:
+        with direct_xhs_request_env():
+            from apis.xhs_pc_apis import XHS_Apis
+
+            api = XHS_Apis()
+            return api.like_note(note_id=note_id, cookies_str=self.cookies)
+
+    def unlike_note(self, note_id: str) -> Any:
+        with direct_xhs_request_env():
+            from apis.xhs_pc_apis import XHS_Apis
+
+            api = XHS_Apis()
+            return api.unlike_note(note_id=note_id, cookies_str=self.cookies)
+
     def get_self_info(self) -> Any:
         with direct_xhs_request_env():
             from apis.xhs_pc_apis import XHS_Apis

@@ -41,6 +41,11 @@ class NoteCommentsRequest(BaseModel):
     note_url: str = Field(min_length=1)
 
 
+class NoteCollectRequest(BaseModel):
+    account_id: int
+    note_id: str = Field(min_length=1)
+
+
 def get_xhs_pc_api_adapter_factory():
     return XhsPcApiAdapter
 
@@ -377,6 +382,89 @@ def note_comments(
         )
     items = normalize_comment_payload(raw_payload)
     return {"total": len(items), "items": items}
+
+
+@router.post("/notes/collect")
+def collect_note(
+    payload: NoteCollectRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+    adapter_factory=Depends(get_xhs_pc_api_adapter_factory),
+):
+    cookies = _get_owned_pc_account_cookies(db, current_user, payload.account_id)
+    success, message, raw_payload = adapter_factory(cookies).collect_note(payload.note_id)
+    if not success:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=message or "XHS note collect failed",
+        )
+    return {"success": True, "note_id": payload.note_id, "raw": raw_payload}
+
+
+class NoteLikeRequest(BaseModel):
+    account_id: int
+    note_id: str = Field(min_length=1)
+
+
+@router.post("/notes/like")
+def like_note(
+    payload: NoteLikeRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+    adapter_factory=Depends(get_xhs_pc_api_adapter_factory),
+):
+    import logging
+    logger = logging.getLogger(__name__)
+    logger.warning(f"[LIKE API] payload={payload}")
+    cookies = _get_owned_pc_account_cookies(db, current_user, payload.account_id)
+    logger.warning(f"[LIKE API] cookies length={len(cookies)}, note_id={payload.note_id!r}")
+    success, message, raw_payload = adapter_factory(cookies).like_note(payload.note_id)
+    logger.warning(f"[LIKE API] success={success}, message={message!r}, raw={str(raw_payload)[:500]}")
+    if not success:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=message or "XHS note like failed",
+        )
+    return {"success": True, "note_id": payload.note_id, "raw": raw_payload}
+
+
+@router.post("/notes/unlike")
+def unlike_note(
+    payload: NoteLikeRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+    adapter_factory=Depends(get_xhs_pc_api_adapter_factory),
+):
+    import logging
+    logger = logging.getLogger(__name__)
+    logger.warning(f"[UNLIKE API] payload={payload}")
+    cookies = _get_owned_pc_account_cookies(db, current_user, payload.account_id)
+    logger.warning(f"[UNLIKE API] cookies length={len(cookies)}, note_id={payload.note_id!r}")
+    success, message, raw_payload = adapter_factory(cookies).unlike_note(payload.note_id)
+    logger.warning(f"[UNLIKE API] success={success}, message={message!r}, raw={str(raw_payload)[:500]}")
+    if not success:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=message or "XHS note unlike failed",
+        )
+    return {"success": True, "note_id": payload.note_id, "raw": raw_payload}
+
+
+@router.post("/notes/uncollect")
+def uncollect_note(
+    payload: NoteCollectRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+    adapter_factory=Depends(get_xhs_pc_api_adapter_factory),
+):
+    cookies = _get_owned_pc_account_cookies(db, current_user, payload.account_id)
+    success, message, raw_payload = adapter_factory(cookies).uncollect_note(payload.note_id)
+    if not success:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=message or "XHS note uncollect failed",
+        )
+    return {"success": True, "note_id": payload.note_id, "raw": raw_payload}
 
 
 def note_comments_placeholder():

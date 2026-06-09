@@ -5,6 +5,17 @@ import random
 import time
 from urllib.parse import urlencode
 
+# execjs 会调用 Node.js，而 NODE_OPTIONS 中的 --use-system-ca 在 Node 22+ 中不被允许，
+# 会导致 "node: --use-system-ca is not allowed in NODE_OPTIONS" 报错。
+# 在导入 execjs 之前清除该变量，避免后续所有 execjs 调用失败。
+if os.environ.get("NODE_OPTIONS"):
+    _unsafe_flags = {"--use-system-ca"}
+    _clean = " ".join(f for f in os.environ["NODE_OPTIONS"].split() if f not in _unsafe_flags)
+    if _clean:
+        os.environ["NODE_OPTIONS"] = _clean
+    else:
+        os.environ.pop("NODE_OPTIONS", None)
+
 import execjs
 from xhs_utils.cookie_util import trans_cookies
 
@@ -53,12 +64,28 @@ def generate_search_request_id():
     random_part = math.ceil(0x7ffffffe * random.random())
     return f"{random_part}-{timestamp_ms}"
 
+def _clean_node_options():
+    """确保 NODE_OPTIONS 中不包含 Node 22+ 不支持的标志（如 --use-system-ca）。
+    execjs 通过 subprocess 调用 Node.js，子进程会继承 os.environ，
+    而 --use-system-ca 会导致 Node 22+ 直接报错退出。"""
+    val = os.environ.get("NODE_OPTIONS", "")
+    if val:
+        _unsafe = {"--use-system-ca"}
+        cleaned = " ".join(f for f in val.split() if f not in _unsafe)
+        if cleaned:
+            os.environ["NODE_OPTIONS"] = cleaned
+        else:
+            os.environ.pop("NODE_OPTIONS", None)
+
+
 def generate_xs_xs_common(a1, api, data='', method='POST'):
+    _clean_node_options()
     ret = _get_static_js('xhs_main_260411.js').call('get_request_headers_params', api, data, a1, method)
     xs, xt, xs_common = ret['xs'], ret['xt'], ret['xs_common']
     return xs, xt, xs_common
 
 def generate_xs(a1, api, data=''):
+    _clean_node_options()
     ret = _get_static_js('xhs_main_260411.js').call('get_xs', api, data, a1)
     xs, xt = ret['X-s'], ret['X-t']
     return xs, xt
