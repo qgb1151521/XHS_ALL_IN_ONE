@@ -74,6 +74,8 @@ def _patch_execjs_node_runtime() -> None:
         for _name, rt in runtimes._runtimes:
             if _name == "Node" and hasattr(rt, "_command"):
                 rt._command = [node_exe_str]
+                rt._binary_cache = [node_exe_str]
+                rt._available = True
                 break
         print(f"[startup] execjs Node runtime patched to: {node_exe_str}")
     except Exception as exc:

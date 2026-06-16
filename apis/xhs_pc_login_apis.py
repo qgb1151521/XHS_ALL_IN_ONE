@@ -150,11 +150,17 @@ class XHSLoginApi:
             cookies[key] = value
 
         res = resp.json()
-        status = (res.get('data') or {}).get('codeStatus')
+        logger.info(f"check_qrcode_status response: {res}")
+        data = res.get('data') or {}
+        # 兼容多种可能的状态字段名
+        status = data.get('codeStatus') if 'codeStatus' in data else data.get('code_status')
         if status is None:
+            logger.warning(f"二维码状态响应缺少 codeStatus: {res}")
             return False, res.get('msg', '二维码状态响应缺少 codeStatus'), cookies
 
+        logger.info(f"二维码状态: {status}")
         if status == 2:
+            logger.info("二维码已确认，正在获取登录信息...")
             cookies = self._login_by_qrcode_status(qr_id, code, cookies)
 
         status_map = {
@@ -172,19 +178,40 @@ class XHSLoginApi:
         splice_api = splice_str(api, params)
 
         headers, _ = generate_headers(cookies['a1'], splice_api, method='GET')
+        logger.info(f"_login_by_qrcode_status request: {self.base_url + splice_api}")
         resp = requests.get(
             self.base_url + splice_api,
             headers=headers, cookies=cookies,
             timeout=REQUEST_TIMEOUT
         )
+        logger.info(f"_login_by_qrcode_status response status: {resp.status_code}")
         for key, value in resp.cookies.items():
             cookies[key] = value
 
         res = resp.json()
-        if res.get('success') and 'login_info' in res.get('data', {}):
-            login_info = res['data']['login_info']
-            if 'session' in login_info and 'web_session' not in cookies:
-                cookies['web_session'] = login_info['session']
+        logger.info(f"_login_by_qrcode_status response: {res}")
+        if res.get('success') and 'data' in res:
+            data = res['data']
+            # 处理多种可能的响应格式
+            login_info = data.get('login_info', {})
+            if not login_info and isinstance(data, dict):
+                # 有些接口直接返回 session 信息在 data 中
+                login_info = data
+            
+            # 尝试多种可能的 session 字段名
+            session_value = (
+                login_info.get('session') or 
+                data.get('session') or
+                login_info.get('web_session') or
+                data.get('web_session')
+            )
+            if session_value:
+                cookies['web_session'] = session_value
+                logger.info(f"Got web_session: {session_value}")
+            else:
+                logger.warning(f"No session found in response: {res}")
+        else:
+            logger.warning(f"Login by qrcode failed: {res}")
 
         return cookies
 

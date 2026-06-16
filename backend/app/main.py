@@ -1,9 +1,65 @@
 from __future__ import annotations
 
+import os
+import shutil
 from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI
+
+
+def _ensure_execjs_uses_node() -> None:
+    node_exe = None
+    for cmd in ("node", "nodejs", "node.exe"):
+        found = shutil.which(cmd)
+        if found:
+            node_exe = found
+            break
+    if not node_exe:
+        candidates = [
+            Path.home() / ".workbuddy" / "binaries" / "node" / "versions",
+            Path(os.environ.get("APPDATA", "")) / ".." / ".workbuddy" / "binaries" / "node" / "versions",
+            Path("C:/Program Files/nodejs"),
+            Path("C:/Program Files (x86)/nodejs"),
+        ]
+        for base in candidates:
+            try:
+                base = base.resolve()
+            except Exception:
+                continue
+            if not base.is_dir():
+                continue
+            for child in sorted(base.iterdir(), reverse=True):
+                exe = child / "node.exe"
+                if exe.is_file():
+                    node_exe = str(exe)
+                    break
+            if node_exe:
+                break
+            exe = base / "node.exe"
+            if exe.is_file():
+                node_exe = str(exe)
+                break
+    if not node_exe:
+        return
+    node_exe_str = str(node_exe)
+    node_dir_str = str(Path(node_exe_str).parent)
+    current_path = os.environ.get("PATH", "")
+    if node_dir_str.lower() not in current_path.lower():
+        os.environ["PATH"] = node_dir_str + os.pathsep + current_path
+    try:
+        import execjs._runtimes as runtimes
+        for _name, rt in runtimes._runtimes:
+            if _name == "Node" and hasattr(rt, "_command"):
+                rt._command = [node_exe_str]
+                rt._binary_cache = [node_exe_str]
+                rt._available = True
+                break
+    except Exception:
+        pass
+
+
+_ensure_execjs_uses_node()
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
