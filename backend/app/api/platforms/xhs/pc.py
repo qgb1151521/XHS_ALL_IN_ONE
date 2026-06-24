@@ -303,6 +303,18 @@ def _get_owned_pc_account_cookies(db: Session, current_user: User, account_id: i
     return _cookies_to_string(decrypt_text(cookie_version.encrypted_cookies))
 
 
+def _sanitize_msg(value: Any) -> str:
+    """清洗错误消息，防止 KeyError 等异常的 str() 表示（如 "'msg'"）透传给前端。"""
+    if not isinstance(value, str):
+        return str(value) if value else ""
+    cleaned = value.strip("'\"")
+    if cleaned.startswith("KeyError("):
+        # 如 KeyError('msg') -> "缺少字段: msg"
+        inner = cleaned[len("KeyError("):-1].strip("'\"")
+        return f"小红书响应缺少必要字段: {inner}"
+    return cleaned
+
+
 @router.post("/search/notes")
 def search_notes(
     payload: SearchNotesRequest,
@@ -310,38 +322,46 @@ def search_notes(
     db: Session = Depends(get_db),
     adapter_factory=Depends(get_xhs_pc_api_adapter_factory),
 ):
-    cookies = _get_owned_pc_account_cookies(db, current_user, payload.account_id)
-    success, message, raw_payload = adapter_factory(cookies).search_note(
-        payload.keyword,
-        page=payload.page,
-        sort_type_choice=payload.sort_type_choice,
-        note_type=payload.note_type,
-        note_time=payload.note_time,
-        note_range=payload.note_range,
-        pos_distance=payload.pos_distance,
-        geo=payload.geo,
-    )
-    if not success:
+    try:
+        cookies = _get_owned_pc_account_cookies(db, current_user, payload.account_id)
+        success, message, raw_payload = adapter_factory(cookies).search_note(
+            payload.keyword,
+            page=payload.page,
+            sort_type_choice=payload.sort_type_choice,
+            note_type=payload.note_type,
+            note_time=payload.note_time,
+            note_range=payload.note_range,
+            pos_distance=payload.pos_distance,
+            geo=payload.geo,
+        )
+        if not success:
+            raise HTTPException(
+                status_code=status.HTTP_502_BAD_GATEWAY,
+                detail=_sanitize_msg(message) or "XHS note search failed",
+            )
+
+        data = (raw_payload or {}).get("data") or {}
+        items = data.get("items") or []
+        normalized_items = [
+            _normalize_search_item(item)
+            for item in items
+            if isinstance(item, dict) and item.get("model_type") not in ("rec_query", "hot_query")
+        ]
+        return {
+            "total": len(normalized_items),
+            "page": payload.page,
+            "page_size": data.get("page_size") or 20,
+            "has_more": bool(data.get("has_more", False)),
+            "items": normalized_items,
+            "raw": raw_payload,
+        }
+    except HTTPException:
+        raise
+    except Exception as exc:
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
-            detail=message or "XHS note search failed",
+            detail=_sanitize_msg(str(exc)) or "XHS note search failed",
         )
-
-    data = (raw_payload or {}).get("data") or {}
-    items = data.get("items") or []
-    normalized_items = [
-        _normalize_search_item(item)
-        for item in items
-        if isinstance(item, dict) and item.get("model_type") not in ("rec_query", "hot_query")
-    ]
-    return {
-        "total": len(normalized_items),
-        "page": payload.page,
-        "page_size": data.get("page_size") or 20,
-        "has_more": bool(data.get("has_more", False)),
-        "items": normalized_items,
-        "raw": raw_payload,
-    }
 
 
 @router.post("/search/users")
@@ -361,7 +381,7 @@ def note_detail(
     if not success:
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
-            detail=message or "XHS note detail failed",
+            detail=_sanitize_msg(message) or "XHS note detail failed",
         )
     return _normalize_detail_payload(raw_payload or {}, source_url=payload.url)
 
@@ -378,7 +398,7 @@ def note_comments(
     if not success:
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
-            detail=message or "XHS note comments failed",
+            detail=_sanitize_msg(message) or "XHS note comments failed",
         )
     items = normalize_comment_payload(raw_payload)
     return {"total": len(items), "items": items}
@@ -396,7 +416,7 @@ def collect_note(
     if not success:
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
-            detail=message or "XHS note collect failed",
+            detail=_sanitize_msg(message) or "XHS note collect failed",
         )
     return {"success": True, "note_id": payload.note_id, "raw": raw_payload}
 
@@ -423,7 +443,7 @@ def like_note(
     if not success:
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
-            detail=message or "XHS note like failed",
+            detail=_sanitize_msg(message) or "XHS note like failed",
         )
     return {"success": True, "note_id": payload.note_id, "raw": raw_payload}
 
@@ -445,7 +465,7 @@ def unlike_note(
     if not success:
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
-            detail=message or "XHS note unlike failed",
+            detail=_sanitize_msg(message) or "XHS note unlike failed",
         )
     return {"success": True, "note_id": payload.note_id, "raw": raw_payload}
 
@@ -462,7 +482,7 @@ def uncollect_note(
     if not success:
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
-            detail=message or "XHS note uncollect failed",
+            detail=_sanitize_msg(message) or "XHS note uncollect failed",
         )
     return {"success": True, "note_id": payload.note_id, "raw": raw_payload}
 

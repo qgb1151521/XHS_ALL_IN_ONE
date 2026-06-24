@@ -76,7 +76,8 @@ class XHS_Apis():
             headers, cookies, data = generate_request_params(cookies_str, api, '', 'GET')
             response = requests.get(self.base_url + api, headers=headers, cookies=cookies, proxies=proxies, timeout=REQUEST_TIMEOUT)
             res_json = response.json()
-            success, msg = res_json["success"], res_json["msg"]
+            success = res_json.get("success", True)
+            msg = res_json.get("msg", "")
         except Exception as e:
             success = False
             msg = _log_api_error(e)
@@ -116,7 +117,8 @@ class XHS_Apis():
             headers, cookies, trans_data = generate_request_params(cookies_str, api, data, 'POST')
             response = requests.post(self.base_url + api, headers=headers, data=trans_data, cookies=cookies, proxies=proxies, timeout=REQUEST_TIMEOUT)
             res_json = response.json()
-            success, msg = res_json["success"], res_json["msg"]
+            success = res_json.get("success", True)
+            msg = res_json.get("msg", "")
         except Exception as e:
             success = False
             msg = _log_api_error(e)
@@ -170,7 +172,8 @@ class XHS_Apis():
             headers, cookies, data = generate_request_params(cookies_str, splice_api, '', 'GET')
             response = requests.get(self.base_url + splice_api, headers=headers, cookies=cookies, proxies=proxies, timeout=REQUEST_TIMEOUT)
             res_json = response.json()
-            success, msg = res_json["success"], res_json["msg"]
+            success = res_json.get("success", True)
+            msg = res_json.get("msg", "")
         except Exception as e:
             success = False
             msg = _log_api_error(e)
@@ -188,7 +191,8 @@ class XHS_Apis():
             headers, cookies, data = generate_request_params(cookies_str, api, '', 'GET')
             response = requests.get(self.base_url + api, headers=headers, cookies=cookies, proxies=proxies, timeout=REQUEST_TIMEOUT)
             res_json = response.json()
-            success, msg = res_json["success"], res_json["msg"]
+            success = res_json.get("success", True)
+            msg = res_json.get("msg", "")
         except Exception as e:
             success = False
             msg = _log_api_error(e)
@@ -207,7 +211,8 @@ class XHS_Apis():
             headers, cookies, data = generate_request_params(cookies_str, api, '', 'GET')
             response = requests.get(self.base_url + api, headers=headers, cookies=cookies, proxies=proxies, timeout=REQUEST_TIMEOUT)
             res_json = response.json()
-            success, msg = res_json["success"], res_json["msg"]
+            success = res_json.get("success", True)
+            msg = res_json.get("msg", "")
         except Exception as e:
             success = False
             msg = _log_api_error(e)
@@ -236,7 +241,8 @@ class XHS_Apis():
             headers, cookies, data = generate_request_params(cookies_str, splice_api, '', 'GET')
             response = requests.get(self.base_url + splice_api, headers=headers, cookies=cookies, proxies=proxies, timeout=REQUEST_TIMEOUT)
             res_json = response.json()
-            success, msg = res_json["success"], res_json["msg"]
+            success = res_json.get("success", True)
+            msg = res_json.get("msg", "")
         except Exception as e:
             success = False
             msg = _log_api_error(e)
@@ -298,7 +304,8 @@ class XHS_Apis():
             headers, cookies, data = generate_request_params(cookies_str, splice_api, '', 'GET')
             response = requests.get(self.base_url + splice_api, headers=headers, cookies=cookies, proxies=proxies, timeout=REQUEST_TIMEOUT)
             res_json = response.json()
-            success, msg = res_json["success"], res_json["msg"]
+            success = res_json.get("success", True)
+            msg = res_json.get("msg", "")
         except Exception as e:
             success = False
             msg = _log_api_error(e)
@@ -360,7 +367,8 @@ class XHS_Apis():
             headers, cookies, data = generate_request_params(cookies_str, splice_api, '', 'GET')
             response = requests.get(self.base_url + splice_api, headers=headers, cookies=cookies, proxies=proxies, timeout=REQUEST_TIMEOUT)
             res_json = response.json()
-            success, msg = res_json["success"], res_json["msg"]
+            success = res_json.get("success", True)
+            msg = res_json.get("msg", "")
         except Exception as e:
             success = False
             msg = _log_api_error(e)
@@ -406,7 +414,7 @@ class XHS_Apis():
             :param cookies_str: 你的cookies
             返回收藏结果
         """
-        res_json = None
+        success, msg, res_json = False, "", None
         try:
             api = "/api/sns/web/v1/note/collect"
             data = {
@@ -416,7 +424,8 @@ class XHS_Apis():
             headers, cookies, trans_data = generate_request_params(cookies_str, api, data, 'POST')
             response = requests.post(self.base_url + api, headers=headers, data=trans_data, cookies=cookies, proxies=proxies, timeout=REQUEST_TIMEOUT)
             res_json = response.json()
-            success, msg = res_json.get("success", False), res_json.get("msg", "")
+            success = bool(res_json["success"]) if "success" in res_json else (res_json.get("code", -1) == 0 if "code" in res_json else "data" in res_json)
+            msg = res_json.get("msg", "")
         except Exception as e:
             success = False
             msg = _log_api_error(e)
@@ -429,7 +438,7 @@ class XHS_Apis():
             :param cookies_str: 你的cookies
             返回取消收藏结果
         """
-        res_json = None
+        success, msg, res_json = False, "", None
         try:
             api = "/api/sns/web/v1/note/collect"
             data = {
@@ -439,7 +448,8 @@ class XHS_Apis():
             headers, cookies, trans_data = generate_request_params(cookies_str, api, data, 'POST')
             response = requests.post(self.base_url + api, headers=headers, data=trans_data, cookies=cookies, proxies=proxies, timeout=REQUEST_TIMEOUT)
             res_json = response.json()
-            success, msg = res_json.get("success", False), res_json.get("msg", "")
+            success = bool(res_json["success"]) if "success" in res_json else (res_json.get("code", -1) == 0 if "code" in res_json else "data" in res_json)
+            msg = res_json.get("msg", "")
         except Exception as e:
             success = False
             msg = _log_api_error(e)
@@ -452,7 +462,7 @@ class XHS_Apis():
             :param cookies_str: 你的cookies
             返回点赞结果
         """
-        res_json = None
+        success, msg, res_json = False, "", None
         try:
             api = "/api/sns/web/v1/note/like"
             data = {
@@ -461,14 +471,17 @@ class XHS_Apis():
             }
             headers, cookies, trans_data = generate_request_params(cookies_str, api, data, 'POST')
             logger.info(f"[like_note] note_id={note_id!r}, trans_data={trans_data!r}")
-            logger.info(f"[like_note] headers[x-s]={headers.get('x-s', '')[:20]}..., x-t={headers.get('x-t', '')}")
+            logger.info(f"[like_note] headers[x-s]={headers.get('x-s', '')[:20]}, x-t={headers.get('x-t', '')}")
             response = requests.post(self.base_url + api, headers=headers, data=trans_data, cookies=cookies, proxies=proxies, timeout=REQUEST_TIMEOUT)
             logger.info(f"[like_note] response status={response.status_code}, body={response.text[:500]}")
             res_json = response.json()
-            success, msg = res_json.get("success", False), res_json.get("msg", "")
+            success = bool(res_json["success"]) if "success" in res_json else (res_json.get("code", -1) == 0 if "code" in res_json else "data" in res_json)
+            msg = res_json.get("msg", "")
         except Exception as e:
             success = False
-            msg = _log_api_error(e)
+            msg = str(e)
+            logger.exception(f"[like_note] error: {e}")
+            res_json = {"success": False, "msg": msg}
         return success, msg, res_json
 
     def unlike_note(self, note_id: str, cookies_str: str, proxies: dict = None):
@@ -478,7 +491,7 @@ class XHS_Apis():
             :param cookies_str: 你的cookies
             返回取消点赞结果
         """
-        res_json = None
+        success, msg, res_json = False, "", None
         try:
             api = "/api/sns/web/v1/note/like"
             data = {
@@ -487,11 +500,12 @@ class XHS_Apis():
             }
             headers, cookies, trans_data = generate_request_params(cookies_str, api, data, 'POST')
             logger.info(f"[unlike_note] note_id={note_id!r}, trans_data={trans_data!r}")
-            logger.info(f"[unlike_note] headers[x-s]={headers.get('x-s', '')[:20]}..., x-t={headers.get('x-t', '')}")
+            logger.info(f"[unlike_note] headers[x-s]={headers.get('x-s', '')[:20]}, x-t={headers.get('x-t', '')}")
             response = requests.post(self.base_url + api, headers=headers, data=trans_data, cookies=cookies, proxies=proxies, timeout=REQUEST_TIMEOUT)
             logger.info(f"[unlike_note] response status={response.status_code}, body={response.text[:500]}")
             res_json = response.json()
-            success, msg = res_json.get("success", False), res_json.get("msg", "")
+            success = bool(res_json["success"]) if "success" in res_json else (res_json.get("code", -1) == 0 if "code" in res_json else "data" in res_json)
+            msg = res_json.get("msg", "")
         except Exception as e:
             success = False
             msg = _log_api_error(e)
@@ -535,7 +549,8 @@ class XHS_Apis():
             headers["xy-direction"] = "13"
             response = requests.post(self.base_url + api, headers=headers, data=data, cookies=cookies, proxies=proxies, timeout=REQUEST_TIMEOUT)
             res_json = response.json()
-            success, msg = res_json["success"], res_json["msg"]
+            success = res_json.get("success", True)
+            msg = res_json.get("msg", "")
         except Exception as e:
             success = False
             msg = _log_api_error(e)
@@ -559,7 +574,8 @@ class XHS_Apis():
             headers, cookies, data = generate_request_params(cookies_str, splice_api, '', 'GET')
             response = requests.get(self.base_url + splice_api, headers=headers, cookies=cookies, proxies=proxies, timeout=REQUEST_TIMEOUT)
             res_json = response.json()
-            success, msg = res_json["success"], res_json["msg"]
+            success = res_json.get("success", True)
+            msg = res_json.get("msg", "")
         except Exception as e:
             success = False
             msg = _log_api_error(e)
@@ -663,14 +679,16 @@ class XHS_Apis():
                     "avif"
                 ]
             }
-            headers, cookies, data = generate_request_params(cookies_str, api, data, 'POST')
-            headers["x-rap-param"] = generate_x_rap_param(api, data)
-            response = requests.post(self.base_url + api, headers=headers, data=data.encode('utf-8'), cookies=cookies, proxies=proxies, timeout=REQUEST_TIMEOUT)
+            _headers, _cookies, _trans_data = generate_request_params(cookies_str, api, data, 'POST')
+            _headers["x-rap-param"] = generate_x_rap_param(api, data)
+            response = requests.post(self.base_url + api, headers=_headers, data=_trans_data.encode('utf-8'), cookies=_cookies, proxies=proxies, timeout=REQUEST_TIMEOUT)
             res_json = response.json()
-            success, msg = res_json["success"], res_json["msg"]
+            success = bool(res_json["success"]) if "success" in res_json else (res_json.get("code", -1) == 0 if "code" in res_json else "data" in res_json)
+            msg = res_json.get("msg", "")
         except Exception as e:
             success = False
             msg = _log_api_error(e)
+            res_json = {"success": False, "msg": msg}
         return success, msg, res_json
 
     def search_some_note(self, query: str, require_num: int, cookies_str: str, sort_type_choice=0, note_type=0, note_time=0, note_range=0, pos_distance=0, geo="", proxies: dict = None):
@@ -734,7 +752,8 @@ class XHS_Apis():
             headers, cookies, data = generate_request_params(cookies_str, api, data, 'POST')
             response = requests.post(self.base_url + api, headers=headers, data=data.encode('utf-8'), cookies=cookies, proxies=proxies, timeout=REQUEST_TIMEOUT)
             res_json = response.json()
-            success, msg = res_json["success"], res_json["msg"]
+            success = res_json.get("success", True)
+            msg = res_json.get("msg", "")
         except Exception as e:
             success = False
             msg = _log_api_error(e)
@@ -791,7 +810,8 @@ class XHS_Apis():
             headers, cookies, data = generate_request_params(cookies_str, splice_api, '', 'GET')
             response = requests.get(self.base_url + splice_api, headers=headers, cookies=cookies, proxies=proxies, timeout=REQUEST_TIMEOUT)
             res_json = response.json()
-            success, msg = res_json["success"], res_json["msg"]
+            success = res_json.get("success", True)
+            msg = res_json.get("msg", "")
         except Exception as e:
             success = False
             msg = _log_api_error(e)
@@ -848,7 +868,8 @@ class XHS_Apis():
             headers, cookies, data = generate_request_params(cookies_str, splice_api, '', 'GET')
             response = requests.get(self.base_url + splice_api, headers=headers, cookies=cookies, proxies=proxies, timeout=REQUEST_TIMEOUT)
             res_json = response.json()
-            success, msg = res_json["success"], res_json["msg"]
+            success = res_json.get("success", True)
+            msg = res_json.get("msg", "")
         except Exception as e:
             success = False
             msg = _log_api_error(e)
@@ -923,7 +944,8 @@ class XHS_Apis():
             headers, cookies, data = generate_request_params(cookies_str, api, '', 'GET')
             response = requests.get(self.base_url + api, headers=headers, cookies=cookies, proxies=proxies, timeout=REQUEST_TIMEOUT)
             res_json = response.json()
-            success, msg = res_json["success"], res_json["msg"]
+            success = res_json.get("success", True)
+            msg = res_json.get("msg", "")
         except Exception as e:
             success = False
             msg = _log_api_error(e)
@@ -947,7 +969,8 @@ class XHS_Apis():
             headers, cookies, data = generate_request_params(cookies_str, splice_api, '', 'GET')
             response = requests.get(self.base_url + splice_api, headers=headers, cookies=cookies, proxies=proxies, timeout=REQUEST_TIMEOUT)
             res_json = response.json()
-            success, msg = res_json["success"], res_json["msg"]
+            success = res_json.get("success", True)
+            msg = res_json.get("msg", "")
         except Exception as e:
             success = False
             msg = _log_api_error(e)
@@ -997,7 +1020,8 @@ class XHS_Apis():
             headers, cookies, data = generate_request_params(cookies_str, splice_api, '', 'GET')
             response = requests.get(self.base_url + splice_api, headers=headers, cookies=cookies, proxies=proxies, timeout=REQUEST_TIMEOUT)
             res_json = response.json()
-            success, msg = res_json["success"], res_json["msg"]
+            success = res_json.get("success", True)
+            msg = res_json.get("msg", "")
         except Exception as e:
             success = False
             msg = _log_api_error(e)
@@ -1047,7 +1071,8 @@ class XHS_Apis():
             headers, cookies, data = generate_request_params(cookies_str, splice_api, '', 'GET')
             response = requests.get(self.base_url + splice_api, headers=headers, cookies=cookies, proxies=proxies, timeout=REQUEST_TIMEOUT)
             res_json = response.json()
-            success, msg = res_json["success"], res_json["msg"]
+            success = res_json.get("success", True)
+            msg = res_json.get("msg", "")
         except Exception as e:
             success = False
             msg = _log_api_error(e)

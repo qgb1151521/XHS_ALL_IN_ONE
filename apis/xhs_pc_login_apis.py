@@ -137,42 +137,7 @@ class XHSLoginApi:
         }
 
     def check_qrcode_status(self, qr_id, code, cookies):
-        api = '/api/qrcode/userinfo'
-        data = {"qrId": qr_id, "code": code}
-
-        headers, data = generate_headers(cookies['a1'], api, data)
-        resp = requests.post(
-            self.base_url + api,
-            headers=headers, cookies=cookies, data=data,
-            timeout=REQUEST_TIMEOUT
-        )
-        for key, value in resp.cookies.items():
-            cookies[key] = value
-
-        res = resp.json()
-        logger.info(f"check_qrcode_status response: {res}")
-        data = res.get('data') or {}
-        # 兼容多种可能的状态字段名
-        status = data.get('codeStatus') if 'codeStatus' in data else data.get('code_status')
-        if status is None:
-            logger.warning(f"二维码状态响应缺少 codeStatus: {res}")
-            return False, res.get('msg', '二维码状态响应缺少 codeStatus'), cookies
-
-        logger.info(f"二维码状态: {status}")
-        if status == 2:
-            logger.info("二维码已确认，正在获取登录信息...")
-            cookies = self._login_by_qrcode_status(qr_id, code, cookies)
-
-        status_map = {
-            0: (False, '请扫描二维码'),
-            1: (False, '请确认登录'),
-            2: (True, '验证成功'),
-            3: (False, '二维码已过期'),
-        }
-        success, msg = status_map.get(status, (False, f'未知状态: {status}'))
-        return success, msg, cookies
-
-    def _login_by_qrcode_status(self, qr_id, code, cookies):
+        """轮询二维码扫码状态 — 使用 /api/sns/web/v1/login/qrcode/status (XHS Web客户端标准轮询端点)"""
         api = '/api/sns/web/v1/login/qrcode/status'
         params = {"qr_id": qr_id, "code": code}
         splice_api = splice_str(api, params)
@@ -189,31 +154,55 @@ class XHSLoginApi:
             cookies[key] = value
 
         res = resp.json()
-        logger.info(f"_login_by_qrcode_status response: {res}")
-        if res.get('success') and 'data' in res:
-            data = res['data']
-            # 处理多种可能的响应格式
-            login_info = data.get('login_info', {})
-            if not login_info and isinstance(data, dict):
-                # 有些接口直接返回 session 信息在 data 中
-                login_info = data
-            
-            # 尝试多种可能的 session 字段名
-            session_value = (
-                login_info.get('session') or 
-                data.get('session') or
-                login_info.get('web_session') or
-                data.get('web_session')
-            )
-            if session_value:
-                cookies['web_session'] = session_value
-                logger.info(f"Got web_session: {session_value}")
-            else:
-                logger.warning(f"No session found in response: {res}")
-        else:
-            logger.warning(f"Login by qrcode failed: {res}")
+        logger.info(f'[check_qrcode_status] /api/sns/web/v1/login/qrcode/status FULL response: {json.dumps(res, ensure_ascii=False)[:1500]}')
+        logger.info(f'[check_qrcode_status] resp.cookies keys={list(resp.cookies.keys())}, items={[(k, str(v)[:50]) for k, v in resp.cookies.items()]}')
 
-        return cookies
+        data_field = res.get('data') or {}
+        # XHS API返回 code_status (下划线格式)，也兼容 codeStatus (驼峰格式)
+        code_status = None
+        if isinstance(data_field, dict):
+            code_status = data_field.get('code_status', data_field.get('codeStatus'))
+
+        if code_status is None:
+            logger.warning(f'[check_qrcode_status] no code_status in response, data_keys={list(data_field.keys()) if isinstance(data_field, dict) else type(data_field)}, FULL: {json.dumps(res, ensure_ascii=False)[:500]}')
+            return False, res.get('msg', '二维码状态响应缺少 code_status'), cookies
+
+        # code_status 状态映射: 0=未扫码, 1=已扫码待确认, 2=登录成功, 3=已过期
+        status_map = {
+            0: (False, '请扫描二维码'),
+            1: (False, '请确认登录'),
+            2: (True, '验证成功'),
+            3: (False, '二维码已过期'),
+        }
+        success, msg = status_map.get(code_status, (False, f'未知状态: {code_status}'))
+
+        # 登录成功时(code_status==2)，提取 web_session
+        if code_status == 2 and isinstance(data_field, dict):
+            login_info = data_field.get('login_info')
+            if isinstance(login_info, dict):
+                # 方式1: secure_session 对应 web_session (XHS标准)
+                secure_session = login_info.get('secure_session')
+                if secure_session and 'web_session' not in cookies:
+                    cookies['web_session'] = secure_session
+                    logger.info(f'[check_qrcode_status] got web_session from login_info.secure_session')
+
+                # 方式2: 如果没有 secure_session，尝试用 session 字段
+                session_val = login_info.get('session')
+                if session_val and 'web_session' not in cookies:
+                    cookies['web_session'] = session_val
+                    logger.info(f'[check_qrcode_status] got web_session from login_info.session')
+
+                # 提取 user_id
+                user_id = login_info.get('user_id')
+                if user_id:
+                    logger.info(f'[check_qrcode_status] got user_id from login_info: {user_id}')
+
+            # 方式3: 如果还是没有 web_session，检查 response cookies (Set-Cookie header)
+            if 'web_session' not in cookies:
+                logger.warning(f'[check_qrcode_status] web_session not found in login_info or response cookies. login_info={login_info if isinstance(login_info, dict) else "N/A"}, resp_cookies_keys={list(resp.cookies.keys())}')
+
+        logger.info(f'[check_qrcode_status] final: code_status={code_status}, success={success}, msg={msg!r}, has_web_session={"web_session" in cookies}')
+        return success, msg, cookies
 
     def get_user_info(self, cookies):
         api = '/api/sns/web/v2/user/me'
@@ -228,7 +217,13 @@ class XHSLoginApi:
             cookies[key] = value
 
         res = resp.json()
-        return res.get('success', False), res.get('data', {}), cookies
+        # 小红书API响应可能没有success字段，只有code:0表示成功
+        success = res.get('success', False) or res.get('code') == 0
+        data = res.get('data') or {}
+        logger.info(f'[get_user_info] /api/sns/web/v2/user/me response: code={res.get("code")}, success={res.get("success")}, data_keys={list(data.keys()) if isinstance(data, dict) else type(data)}, has_web_session_in_cookies={"web_session" in cookies}')
+        if not success and not data:
+            logger.warning(f'get_user_info failed: FULL response: {json.dumps(res, ensure_ascii=False)[:500]}')
+        return success, data, cookies
 
     def send_phone_code(self, phone, cookies, zone='86'):
         api = '/api/sns/web/v2/login/send_code'

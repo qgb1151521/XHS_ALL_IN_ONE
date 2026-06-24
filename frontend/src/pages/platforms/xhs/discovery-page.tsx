@@ -16,7 +16,7 @@ import {
   StarFilled,
   StarOutlined,
 } from "@ant-design/icons";
-import { Alert, Badge, Button, Card, Col, Descriptions, Drawer, Empty, Input, Row, Select, Space, Spin, Tag, Tooltip, Typography } from "antd";
+import { Alert, AutoComplete, Badge, Button, Card, Col, Descriptions, Drawer, Empty, Input, Row, Select, Space, Spin, Tag, Tooltip, Typography } from "antd";
 import { ClipboardEvent, FormEvent, MouseEvent, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 
@@ -109,6 +109,27 @@ export function XhsDiscoveryPage() {
   const [accounts, setAccounts] = useState<PlatformAccount[]>([]);
   const [selectedAccountId, setSelectedAccountId] = useState<number | null>(null);
   const [keyword, setKeyword] = useState("");
+  const [keywordHistory, setKeywordHistory] = useState<string[]>(() => {
+    try {
+      const raw = localStorage.getItem("xhs_search_history");
+      return raw ? JSON.parse(raw) : [];
+    } catch {
+      return [];
+    }
+  });
+  function saveKeywordHistory(kw: string) {
+    const trimmed = kw.trim();
+    if (!trimmed) return;
+    setKeywordHistory((prev) => {
+      const next = [trimmed, ...prev.filter((v) => v !== trimmed)].slice(0, 20);
+      try { localStorage.setItem("xhs_search_history", JSON.stringify(next)); } catch { /* ignore */ }
+      return next;
+    });
+  }
+  function clearKeywordHistory() {
+    setKeywordHistory([]);
+    try { localStorage.removeItem("xhs_search_history"); } catch { /* ignore */ }
+  }
   const [noteUrl, setNoteUrl] = useState("");
   const [pasteHint, setPasteHint] = useState<{ type: "success" | "error"; msg: string } | null>(null);
   const pasteHintTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -145,21 +166,20 @@ export function XhsDiscoveryPage() {
     catch { setError("账号列表加载失败。"); } finally { setIsLoadingAccounts(false); }
   }
 
-  function searchPayload(nextPage: number): XhsSearchOptions | null {
-    if (!selectedAccountId) { setError("请先选择一个 PC 账号。"); return null; }
-    if (!keyword.trim()) { setError("请输入要搜索的关键词。"); return null; }
-    return { account_id: selectedAccountId, keyword: keyword.trim(), page: nextPage, ...filters, geo: filters.geo.trim() };
-  }
-
-  async function runSearch(nextPage: number, append: boolean) {
-    const payload = searchPayload(nextPage); if (!payload) return;
+  async function runSearch(nextPage: number, append: boolean, overrideKeyword?: string) {
+    const kw = (overrideKeyword ?? keyword).trim();
+    if (!selectedAccountId) { setError("请先选择一个 PC 账号。"); return; }
+    if (!kw) { setError("请输入要搜索的关键词。"); return; }
+    saveKeywordHistory(kw);
+    setKeyword(kw);
     setError(null); append ? setIsLoadingMore(true) : setIsSearching(true);
     try {
+      const payload: XhsSearchOptions = { account_id: selectedAccountId, keyword: kw, page: nextPage, ...filters, geo: filters.geo.trim() };
       const result = await searchXhsNotes(payload);
       setNotes((c) => append ? [...c, ...result.items] : result.items);
       setPage(result.page); setHasMore(result.has_more);
       void loadSavedNoteIds();
-      setCommentPreviewByNoteId((c) => append ? c : {}); setCommentPreviewErrors((c) => append ? c : {}); setSearchedKeyword(payload.keyword);
+      setCommentPreviewByNoteId((c) => append ? c : {}); setCommentPreviewErrors((c) => append ? c : {}); setSearchedKeyword(kw);
     } catch (err: unknown) { const a = err as { response?: { status?: number; data?: { detail?: string } }; message?: string }; setError(a?.response?.data?.detail ? `[${a.response.status}] ${a.response.data.detail}` : `搜索失败：${a?.message || "请检查网络和后端服务"}`); }
     finally { setIsSearching(false); setIsLoadingMore(false); }
   }
@@ -319,7 +339,31 @@ export function XhsDiscoveryPage() {
         <form onSubmit={(e) => { e.preventDefault(); void runSearch(1, false); }}>
           <Row gutter={[12, 12]}>
             <Col span={6}><div style={{ marginBottom: 4 }}><Text type="secondary" style={{ fontSize: 12 }}>搜索账号</Text></div><Select value={selectedAccountId} onChange={setSelectedAccountId} placeholder="选择 PC 账号" style={{ width: "100%" }} options={pcAccountOptions} /></Col>
-            <Col span={6}><div style={{ marginBottom: 4 }}><Text type="secondary" style={{ fontSize: 12 }}>关键词</Text></div><Input.Search value={keyword} onChange={(e) => setKeyword(e.target.value)} placeholder="低卡早餐、通勤穿搭" loading={isSearching} onSearch={() => void runSearch(1, false)} enterButton /></Col>
+            <Col span={6}>
+              <div style={{ marginBottom: 4 }}><Text type="secondary" style={{ fontSize: 12 }}>关键词</Text></div>
+              <div style={{ display: "flex", gap: 4, alignItems: "center" }}>
+                <AutoComplete
+                  value={keyword}
+                  onChange={(v) => setKeyword(v)}
+                  onSelect={(v) => void runSearch(1, false, v)}
+                  options={keywordHistory.filter((v) => !keyword.trim() || v.includes(keyword.trim())).map((v) => ({ value: v, label: v }))}
+                  placeholder="低卡早餐、通勤穿搭"
+                  style={{ flex: 1 }}
+                  filterOption={false}
+                  dropdownRender={(menu) => (
+                    <div>
+                      {menu}
+                      {keywordHistory.length > 0 && (
+                        <div style={{ padding: "4px 12px", borderTop: "1px solid #303030", marginTop: 4 }}>
+                          <Button type="link" size="small" danger onClick={clearKeywordHistory} style={{ fontSize: 11 }}>清空历史记录</Button>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                />
+                <Button type="primary" icon={<SearchOutlined />} loading={isSearching} onClick={() => void runSearch(1, false)} />
+              </div>
+            </Col>
             <Col span={3}><div style={{ marginBottom: 4 }}><Text type="secondary" style={{ fontSize: 12 }}>排序</Text></div><Select value={filters.sort_type_choice} onChange={(v) => setFilters((c) => ({ ...c, sort_type_choice: v }))} style={{ width: "100%" }} options={sortOptions} /></Col>
             <Col span={3}><div style={{ marginBottom: 4 }}><Text type="secondary" style={{ fontSize: 12 }}>类型</Text></div><Select value={filters.note_type} onChange={(v) => setFilters((c) => ({ ...c, note_type: v }))} style={{ width: "100%" }} options={noteTypeOptions} /></Col>
             <Col span={3}><div style={{ marginBottom: 4 }}><Text type="secondary" style={{ fontSize: 12 }}>时间</Text></div><Select value={filters.note_time} onChange={(v) => setFilters((c) => ({ ...c, note_time: v }))} style={{ width: "100%" }} options={noteTimeOptions} /></Col>

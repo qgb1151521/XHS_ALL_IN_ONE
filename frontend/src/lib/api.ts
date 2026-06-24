@@ -833,7 +833,10 @@ export async function createXhsCreatorQrLoginSession(): Promise<XhsQrLoginSessio
 }
 
 export async function pollXhsLoginSession(sessionId: number): Promise<XhsQrLoginSession> {
-  const response = await http.get<XhsQrLoginSession>(`/xhs/login-sessions/${sessionId}`);
+  const response = await http.get<XhsQrLoginSession>(`/xhs/login-sessions/${sessionId}`, {
+    // 轮询请求失败时不要弹全局错误通知，由 qr-login-panel 组件自身处理
+    _silent: true,
+  } as Record<string, unknown>);
   return response.data;
 }
 

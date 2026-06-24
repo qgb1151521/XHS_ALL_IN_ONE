@@ -100,7 +100,8 @@ def create_app() -> FastAPI:
 
     @app.get("/api/health", tags=["health"])
     def health() -> dict:
-        return {"status": "ok", "service": "spider-xhs"}
+        import datetime
+        return {"status": "ok", "service": "spider-xhs", "deployed_at": datetime.datetime.now().isoformat()}
 
     app.include_router(registry.router, prefix="/api")
     app.include_router(auth.router, prefix="/api")

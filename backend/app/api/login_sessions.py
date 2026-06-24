@@ -3,10 +3,13 @@ from __future__ import annotations
 import base64
 import io
 import json
+import logging
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
+
+logger = logging.getLogger(__name__)
 
 from backend.app.adapters.xhs.creator_login_adapter import XhsCreatorLoginAdapter
 from backend.app.adapters.xhs.pc_login_adapter import XhsPcLoginAdapter
@@ -121,12 +124,14 @@ def _create_account_from_login(
     cookies: dict,
 ) -> tuple[PlatformAccount, str]:
     cookies_text = _dump_json(cookies)
+    logger.info(f"[_create_account_from_login] sub_type={sub_type}, has_web_session={'web_session' in cookies}, user_info_keys={list(user_info.keys()) if user_info else 'EMPTY'}, external_user_id={user_info.get('external_user_id', 'MISSING')!r}, nickname={user_info.get('nickname', 'MISSING')!r}")
     if sub_type == "pc":
         try:
             self_profile = XhsPcApiAdapter(cookie_header_from_text(cookies_text)).get_self_info()
+            logger.info(f"[_create_account_from_login] get_self_info success: nickname={self_profile.get('nickname', 'N/A')!r}, user_id={self_profile.get('user_id', 'N/A')!r}")
             user_info = enrich_user_info_with_xhs_self_profile(user_info, self_profile)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning(f"[_create_account_from_login] get_self_info failed (cookies may lack web_session): {type(e).__name__}: {e}")
     return upsert_platform_account_from_login(
         db=db,
         user_id=user_id,
@@ -146,8 +151,11 @@ def pc_qrcode(
 ):
     payload = payload or PcQrCodeRequest()
     try:
+        logger.info("[QR_CREATE] PC: creating qrcode...")
         qr_payload = adapter.create_qrcode()
+        logger.info(f"[QR_CREATE] PC: qr_id={qr_payload['qr_id']}, qr_url={qr_payload['qr_url'][:60]}...")
     except Exception as exc:
+        logger.error(f"[QR_CREATE] PC failed: {type(exc).__name__}: {exc}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail=f"XHS PC QR code generation failed: {exc}",
@@ -182,8 +190,11 @@ def creator_qrcode(
     adapter: XhsCreatorLoginAdapter = Depends(get_creator_login_adapter),
 ):
     try:
+        logger.info("[QR_CREATE] Creator: creating qrcode...")
         payload = adapter.create_qrcode()
+        logger.info(f"[QR_CREATE] Creator: qr_id={payload['qr_id']}, qr_url={payload['qr_url'][:60]}...")
     except Exception as exc:
+        logger.error(f"[QR_CREATE] Creator failed: {type(exc).__name__}: {exc}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail=f"XHS Creator QR code generation failed: {exc}",
@@ -224,49 +235,65 @@ def login_session(
     if session.sub_type not in {"pc", "creator"} or not session.qr_id:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Unsupported login session")
 
-    cookies, sync_creator = _load_temp_state(decrypt_text(session.encrypted_temp_cookies))
-    if session.sub_type == "pc":
-        if not session.code:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Unsupported login session")
-        result = pc_adapter.check_qrcode_status(session.qr_id, session.code, cookies)
-        account_sub_type = "pc"
-        user_info = pc_adapter.get_user_info(result["cookies"]) if result["status"] == "confirmed" else None
-    else:
-        result = creator_adapter.check_qrcode_status(session.qr_id, cookies)
-        account_sub_type = "creator"
-        user_info = creator_adapter.get_user_info(result["cookies"]) if result["status"] == "confirmed" else None
-    session.status = result["status"]
-    session.encrypted_temp_cookies = encrypt_text(
-        _dump_temp_state(result["cookies"], sync_creator=sync_creator)
-    )
+    try:
+        cookies, sync_creator = _load_temp_state(decrypt_text(session.encrypted_temp_cookies))
+        logger.info(f"[QR_POLL] session_id={session_id}, sub_type={session.sub_type}, cookies_keys={list(cookies.keys()) if cookies else 'EMPTY'}")
 
-    account_payload = None
-    creator_account_payload = None
-    if session.status == "confirmed":
-        account, action = _create_account_from_login(
-            db=db,
-            user_id=current_user.id,
-            sub_type=account_sub_type,
-            user_info=user_info,
-            cookies=result["cookies"],
+        if session.sub_type == "pc":
+            if not session.code:
+                raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Unsupported login session")
+            result = pc_adapter.check_qrcode_status(session.qr_id, session.code, cookies)
+            account_sub_type = "pc"
+            logger.info(f"[QR_POLL] session_id={session_id}, PC check result: status={result['status']}, has_web_session={'web_session' in result['cookies']}, cookie_keys={list(result['cookies'].keys())}")
+            user_info = pc_adapter.get_user_info(result["cookies"]) if result["status"] == "confirmed" else None
+        else:
+            result = creator_adapter.check_qrcode_status(session.qr_id, cookies)
+            account_sub_type = "creator"
+            logger.info(f"[QR_POLL] session_id={session_id}, Creator check result: status={result['status']}, cookie_keys={list(result['cookies'].keys())}")
+            user_info = creator_adapter.get_user_info(result["cookies"]) if result["status"] == "confirmed" else None
+
+        logger.info(f"[QR_POLL] session_id={session_id}, result_status={result['status']}")
+
+        session.status = result["status"]
+        session.encrypted_temp_cookies = encrypt_text(
+            _dump_temp_state(result["cookies"], sync_creator=sync_creator)
         )
-        account_payload = serialize_account(account, action)
-        if account_sub_type == "pc" and sync_creator:
-            creator_account_payload = _sync_creator_account_from_pc_login(
+
+        account_payload = None
+        creator_account_payload = None
+        if session.status == "confirmed":
+            account, action = _create_account_from_login(
                 db=db,
                 user_id=current_user.id,
-                pc_cookies=result["cookies"],
-                creator_adapter=creator_adapter,
+                sub_type=account_sub_type,
+                user_info=user_info,
+                cookies=result["cookies"],
             )
+            account_payload = serialize_account(account, action)
+            if account_sub_type == "pc" and sync_creator:
+                creator_account_payload = _sync_creator_account_from_pc_login(
+                    db=db,
+                    user_id=current_user.id,
+                    pc_cookies=result["cookies"],
+                    creator_adapter=creator_adapter,
+                )
 
-    db.commit()
-    return {
-        "session_id": session.id,
-        "status": session.status,
-        "qr_url": session.qr_url,
-        "account": account_payload,
-        "creator_account": creator_account_payload,
-    }
+        db.commit()
+        return {
+            "session_id": session.id,
+            "status": session.status,
+            "qr_url": session.qr_url,
+            "account": account_payload,
+            "creator_account": creator_account_payload,
+        }
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.error(f"[QR_POLL] session_id={session_id} failed: {type(exc).__name__}: {exc}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=f"扫码登录状态查询失败: {exc}",
+        ) from exc
 
 
 @router.post("/pc/phone/send-code")

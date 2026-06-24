@@ -205,6 +205,29 @@ class XHSCreatorLoginApi:
             -1: (False, '二维码已过期'),
         }
         success, msg = status_map.get(status, (False, f'未知状态: {status}'))
+
+        if success:
+            exchange_api = '/api/cas/customer/web/service-ticket'
+            exchange_data = {"service": "https://creator.xiaohongshu.com", "source": "official", "type": "tgt"}
+            exchange_headers = self._get_request_headers()
+            exchange_headers['content-type'] = 'application/json'
+            exchange_sign = generate_xsc(cookies['a1'], exchange_api, exchange_data)
+            exchange_headers.update(exchange_sign)
+            exchange_data_str = json.dumps(exchange_data, separators=(',', ':'), ensure_ascii=False)
+            exchange_resp = requests.post(
+                self.customer_url + exchange_api,
+                headers=exchange_headers,
+                cookies=cookies,
+                data=exchange_data_str.encode('utf-8'),
+                timeout=REQUEST_TIMEOUT
+            )
+            for key, value in exchange_resp.cookies.items():
+                cookies[key] = value
+            exchange_res = exchange_resp.json()
+            logger.info(f'[check_qrcode_status] session exchange result: success={exchange_res.get("success")}, data={exchange_res.get("data")}, cookie_keys={list(cookies.keys())}')
+            if not exchange_res.get('success'):
+                logger.warning(f'[check_qrcode_status] session exchange failed: {exchange_res.get("msg", "unknown")}')
+
         return success, msg, cookies
 
     def get_user_info(self, cookies):
@@ -225,7 +248,12 @@ class XHSCreatorLoginApi:
             cookies[key] = value
 
         res = resp.json()
-        return res.get('success', False), res.get('data', {}), cookies
+        # 小红书API响应可能没有success字段，只有code:0表示成功
+        success = res.get('success', False) or res.get('code') == 0
+        data = res.get('data') or {}
+        if not success and not data:
+            logger.warning(f'creator get_user_info failed: code={res.get("code")}, msg={res.get("msg")}, raw_keys={list(res.keys())}')
+        return success, data, cookies
 
     def send_phone_code(self, phone, cookies, zone='86'):
         api = '/api/cas/customer/web/verify-code'

@@ -1,13 +1,25 @@
 from __future__ import annotations
 
+import importlib
+import logging
+import sys
 from typing import Any
 
 from backend.app.adapters.xhs.request_env import direct_xhs_request_env
+
+logger = logging.getLogger(__name__)
+
+
+def _ensure_creator_login_apis_module():
+    """强制重载 apis.xhs_creator_login_apis 模块，确保修改后无需重启后端即可生效。"""
+    if "apis.xhs_creator_login_apis" in sys.modules:
+        importlib.reload(sys.modules["apis.xhs_creator_login_apis"])
 
 
 class XhsCreatorLoginAdapter:
     def exchange_from_user_cookies(self, user_cookies: dict[str, Any]) -> dict[str, Any]:
         with direct_xhs_request_env():
+            _ensure_creator_login_apis_module()
             from apis.xhs_creator_login_apis import XHSCreatorLoginApi
 
             api = XHSCreatorLoginApi()
@@ -18,6 +30,7 @@ class XhsCreatorLoginAdapter:
 
     def create_qrcode(self) -> dict[str, Any]:
         with direct_xhs_request_env():
+            _ensure_creator_login_apis_module()
             from apis.xhs_creator_login_apis import XHSCreatorLoginApi
 
             api = XHSCreatorLoginApi()
@@ -33,10 +46,12 @@ class XhsCreatorLoginAdapter:
 
     def check_qrcode_status(self, qr_id: str, cookies: dict[str, Any]) -> dict[str, Any]:
         with direct_xhs_request_env():
+            _ensure_creator_login_apis_module()
             from apis.xhs_creator_login_apis import XHSCreatorLoginApi
 
             api = XHSCreatorLoginApi()
             success, message, updated_cookies = api.check_qrcode_status(qr_id, cookies)
+        logger.info(f"[CREATOR_LOGIN] check_qrcode_status: success={success}, message={message!r}")
         status = "confirmed" if success else "pending"
         if "过期" in message or "expired" in message.lower():
             status = "expired"
@@ -46,12 +61,19 @@ class XhsCreatorLoginAdapter:
 
     def get_user_info(self, cookies: dict[str, Any]) -> dict[str, Any]:
         with direct_xhs_request_env():
+            _ensure_creator_login_apis_module()
             from apis.xhs_creator_login_apis import XHSCreatorLoginApi
 
             api = XHSCreatorLoginApi()
             success, data, _ = api.get_user_info(cookies)
-        if not success:
-            raise RuntimeError("Failed to fetch XHS Creator user info")
+        if not success or not data:
+            logger.warning(f"[CREATOR_LOGIN] get_user_info failed or empty, cookies may still be valid. success={success}, data_keys={list(data.keys()) if data else 'EMPTY'}")
+            return {
+                "external_user_id": "",
+                "nickname": "",
+                "avatar_url": "",
+                "profile": {"raw": data or {}},
+            }
         return {
             "external_user_id": data.get("userId", ""),
             "nickname": data.get("userName", ""),
@@ -69,6 +91,7 @@ class XhsCreatorLoginAdapter:
 
     def create_phone_session(self, phone: str) -> dict[str, Any]:
         with direct_xhs_request_env():
+            _ensure_creator_login_apis_module()
             from apis.xhs_creator_login_apis import XHSCreatorLoginApi
 
             api = XHSCreatorLoginApi()
@@ -80,6 +103,7 @@ class XhsCreatorLoginAdapter:
 
     def confirm_phone_login(self, phone: str, code: str, cookies: dict[str, Any]) -> dict[str, Any]:
         with direct_xhs_request_env():
+            _ensure_creator_login_apis_module()
             from apis.xhs_creator_login_apis import XHSCreatorLoginApi
 
             api = XHSCreatorLoginApi()

@@ -1,8 +1,21 @@
 from __future__ import annotations
 
+import importlib
+import sys
 from typing import Any
 
 from backend.app.adapters.xhs.request_env import direct_xhs_request_env
+
+
+def _ensure_xhs_apis_module():
+    """强制重载 apis.xhs_pc_apis 模块，确保修改后无需重启后端即可生效。
+
+    uvicorn --reload 只监听 backend/ 目录，不监听 apis/ 目录，
+    因此 Python 模块缓存会导致修改 apis/ 下的文件后后端不感知变化。
+    通过 importlib.reload() 在每次调用时强制重载模块来解决这个问题。
+    """
+    if "apis.xhs_pc_apis" in sys.modules:
+        importlib.reload(sys.modules["apis.xhs_pc_apis"])
 
 
 class XhsPcApiAdapter:
@@ -21,6 +34,7 @@ class XhsPcApiAdapter:
         geo: str = "",
     ) -> Any:
         with direct_xhs_request_env():
+            _ensure_xhs_apis_module()
             from apis.xhs_pc_apis import XHS_Apis
 
             api = XHS_Apis()
@@ -38,6 +52,7 @@ class XhsPcApiAdapter:
 
     def get_note_info(self, url: str) -> Any:
         with direct_xhs_request_env():
+            _ensure_xhs_apis_module()
             from apis.xhs_pc_apis import XHS_Apis
 
             api = XHS_Apis()
@@ -45,6 +60,7 @@ class XhsPcApiAdapter:
 
     def get_note_comments(self, note_url: str) -> Any:
         with direct_xhs_request_env():
+            _ensure_xhs_apis_module()
             from apis.xhs_pc_apis import XHS_Apis
 
             api = XHS_Apis()
@@ -52,6 +68,7 @@ class XhsPcApiAdapter:
 
     def get_user_notes(self, user_url: str) -> Any:
         with direct_xhs_request_env():
+            _ensure_xhs_apis_module()
             from apis.xhs_pc_apis import XHS_Apis
 
             api = XHS_Apis()
@@ -59,6 +76,7 @@ class XhsPcApiAdapter:
 
     def collect_note(self, note_id: str) -> Any:
         with direct_xhs_request_env():
+            _ensure_xhs_apis_module()
             from apis.xhs_pc_apis import XHS_Apis
 
             api = XHS_Apis()
@@ -66,6 +84,7 @@ class XhsPcApiAdapter:
 
     def uncollect_note(self, note_id: str) -> Any:
         with direct_xhs_request_env():
+            _ensure_xhs_apis_module()
             from apis.xhs_pc_apis import XHS_Apis
 
             api = XHS_Apis()
@@ -73,6 +92,7 @@ class XhsPcApiAdapter:
 
     def like_note(self, note_id: str) -> Any:
         with direct_xhs_request_env():
+            _ensure_xhs_apis_module()
             from apis.xhs_pc_apis import XHS_Apis
 
             api = XHS_Apis()
@@ -80,6 +100,7 @@ class XhsPcApiAdapter:
 
     def unlike_note(self, note_id: str) -> Any:
         with direct_xhs_request_env():
+            _ensure_xhs_apis_module()
             from apis.xhs_pc_apis import XHS_Apis
 
             api = XHS_Apis()
@@ -87,6 +108,7 @@ class XhsPcApiAdapter:
 
     def get_self_info(self) -> Any:
         with direct_xhs_request_env():
+            _ensure_xhs_apis_module()
             from apis.xhs_pc_apis import XHS_Apis
 
             api = XHS_Apis()

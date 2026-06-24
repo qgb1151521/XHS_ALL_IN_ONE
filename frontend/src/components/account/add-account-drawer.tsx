@@ -1,5 +1,5 @@
 import { Drawer, Segmented, message } from "antd";
-import { useState } from "react";
+import { useCallback, useState } from "react";
 
 import type { PlatformAccount } from "../../types";
 import { CookieImportPanel } from "./cookie-import-panel";
@@ -30,11 +30,11 @@ export function AddAccountDrawer({ open, onClose, onBound }: AddAccountDrawerPro
   const [accountType, setAccountType] = useState<AccountType>("pc");
   const [method, setMethod] = useState<LoginMethod>("qr");
 
-  function handleConfirmed(account: PlatformAccount) {
+  const handleConfirmed = useCallback((account: PlatformAccount) => {
     const actionText = account.action === "updated" ? "已更新到账号矩阵" : "已加入账号矩阵";
     message.success(`${account.nickname || "账号"} ${actionText}`);
     onBound();
-  }
+  }, [onBound]);
 
   return (
     <Drawer
